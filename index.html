@@ -69,17 +69,19 @@
   #board-wrapper {
     position: relative;
     width: 100%;
+    aspect-ratio: 30 / 20;
     background: #1565a0;
+    overflow: hidden;
   }
 
   #grid {
     display: grid;
     width: 100%;
+    height: 100%;
     touch-action: manipulation;
   }
 
   .cell {
-    aspect-ratio: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -91,6 +93,9 @@
     transition: background 0.15s ease, transform 0.1s ease;
     position: relative;
     z-index: 1;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
   }
 
   .cell:not(.revealed):not(.land):hover {
@@ -607,7 +612,7 @@ function createGrid() {
 // LAND OVERLAY CANVAS
 // ============================================================
 function drawLandOverlay() {
-  const rect = gridEl.getBoundingClientRect();
+  const rect = document.getElementById('board-wrapper').getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   landCanvas.width = rect.width * dpr;
   landCanvas.height = rect.height * dpr;
@@ -1121,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
   playableGrid = computePlayableGrid();
   updateBestTimeDisplay();
   resetGame();
-  resizeObserver.observe(gridEl);
+  resizeObserver.observe(document.getElementById('board-wrapper'));
 });
 </script>
 </body>
