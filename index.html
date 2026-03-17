@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hormuz Sweeper</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #060d14;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #e0e8f0;
+    overflow: hidden;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 960px;
+    padding: 8px;
+  }
+
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 12px;
+    background: #0a2a43;
+    border-radius: 8px 8px 0 0;
+    font-size: 16px;
+    gap: 8px;
+  }
+
+  #header .stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 70px;
+  }
+
+  #header .stat.right { justify-content: flex-end; }
+
+  #header .title {
+    font-weight: 700;
+    font-size: 15px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #best-time {
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  #board-wrapper {
+    position: relative;
+    width: 100%;
+    background: #1565a0;
+  }
+
+  #grid {
+    display: grid;
+    width: 100%;
+    touch-action: manipulation;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    background: #1976c8;
+    border: 1px solid #1060a0;
+    transition: background 0.15s ease, transform 0.1s ease;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cell:not(.revealed):not(.land):hover {
+    background: #2196f3;
+    z-index: 2;
+  }
+
+  .cell.land {
+    pointer-events: none;
+    background: transparent;
+    border-color: transparent;
+    z-index: 0;
+  }
+
+  .cell.revealed {
+    background: #d6eaf8;
+    border-color: #b0d4f1;
+    cursor: default;
+    color: #333;
+  }
+
+  .cell.revealed.mine-hit {
+    background: #ff4444;
+  }
+
+  .cell.flagged {
+    font-size: 16px;
+  }
+
+  .cell.mine-revealed {
+    background: #fce4e4;
+    border-color: #f0b0b0;
+  }
+
+  /* Number colors - classic minesweeper */
+  .cell.n1 { color: #1565c0; }
+  .cell.n2 { color: #2e7d32; }
+  .cell.n3 { color: #c62828; }
+  .cell.n4 { color: #6a1b9a; }
+  .cell.n5 { color: #e65100; }
+  .cell.n6 { color: #00838f; }
+  .cell.n7 { color: #424242; }
+  .cell.n8 { color: #9e9e9e; }
+
+  #land-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  #overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(6, 13, 20, 0.88);
+    z-index: 10;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    cursor: pointer;
+    border-radius: 0 0 8px 8px;
+  }
+
+  #overlay.visible {
+    display: flex;
+  }
+
+  #overlay .emoji { font-size: 48px; margin-bottom: 12px; }
+  #overlay .msg { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  #overlay .sub { font-size: 14px; opacity: 0.7; margin-bottom: 4px; }
+  #overlay .record { font-size: 14px; color: #ffd700; margin-bottom: 8px; }
+  #overlay .restart { font-size: 13px; opacity: 0.5; margin-top: 12px; }
+
+  #flash {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: red;
+    opacity: 0.3;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-4px, 2px); }
+    20% { transform: translate(3px, -3px); }
+    30% { transform: translate(-2px, 4px); }
+    40% { transform: translate(4px, -1px); }
+    50% { transform: translate(-3px, -2px); }
+    60% { transform: translate(2px, 3px); }
+    70% { transform: translate(-4px, -1px); }
+    80% { transform: translate(3px, 2px); }
+    90% { transform: translate(-1px, -3px); }
+  }
+
+  .shaking { animation: shake 0.5s ease-in-out; }
+
+  @keyframes popIn {
+    0% { transform: scale(0); }
+    70% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+
+  .pop { animation: popIn 0.3s ease-out; }
+
+  @keyframes revealWave {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.92); }
+    100% { transform: scale(1); }
+  }
+
+  .wave-reveal {
+    animation: revealWave 0.2s ease-out;
+  }
+
+  #footer {
+    width: 100%;
+    padding: 4px 12px;
+    background: #0a2a43;
+    border-radius: 0 0 8px 8px;
+    text-align: center;
+    font-size: 11px;
+    opacity: 0.4;
+  }
+
+  @media (max-width: 600px) {
+    #game-container { padding: 2px; }
+    #header { font-size: 13px; padding: 4px 8px; }
+    #header .title { font-size: 12px; }
+    .cell { font-size: 11px; }
+    .cell.flagged { font-size: 13px; }
+    #overlay .emoji { font-size: 36px; }
+    #overlay .msg { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="header">
+    <div class="stat"><span id="mine-counter">💣 50</span></div>
+    <div class="title">⚓ Hormuz Sweeper</div>
+    <div class="stat right">
+      <span id="timer">⏱ 0.0s</span>
+    </div>
+  </div>
+  <div id="board-wrapper">
+    <div id="grid"></div>
+    <canvas id="land-canvas"></canvas>
+    <div id="overlay">
+      <div class="emoji"></div>
+      <div class="msg"></div>
+      <div class="sub"></div>
+      <div class="record"></div>
+      <div class="restart">Tap to play again</div>
+    </div>
+  </div>
+  <div id="footer">
+    <span id="best-time">Best: --</span>
+  </div>
+</div>
+<div id="flash"></div>
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const COLS = 30;
+const ROWS = 20;
+const MINE_COUNT = 50;
+const WATER_THRESHOLD = 0.78;
+
+// Geo bounding box for the Strait of Hormuz
+const MIN_LON = 55.4;
+const MAX_LON = 57.15;
+const MIN_LAT = 25.7;
+const MAX_LAT = 27.2;
+
+// ============================================================
+// COASTLINE DATA (lon, lat pairs)
+// ============================================================
+// Iran mainland coast (north) - traces from west to east
+const IRAN_COAST = [
+  [55.40, 27.20], // NW corner (top-left of map)
+  [55.40, 26.95],
+  [55.55, 26.85],
+  [55.70, 26.82],
+  [55.85, 26.78],
+  [55.95, 26.72],
+  [56.05, 26.68],
+  [56.10, 26.70],
+  [56.18, 26.78],
+  [56.22, 26.88],
+  [56.27, 26.92],
+  [56.30, 26.88],
+  [56.28, 26.80],
+  [56.30, 26.75],
+  [56.35, 26.72],
+  // Bandar Abbas area
+  [56.20, 26.68],
+  [56.15, 26.62],
+  [56.18, 26.56],
+  [56.25, 26.55],
+  [56.35, 26.58],
+  [56.42, 26.62],
+  [56.50, 26.65],
+  [56.55, 26.62],
+  [56.60, 26.56],
+  [56.65, 26.50],
+  [56.70, 26.48],
+  [56.80, 26.46],
+  [56.90, 26.40],
+  [57.00, 26.35],
+  [57.10, 26.28],
+  [57.15, 26.22],
+  // East edge continues to top-right corner
+  [57.15, 27.20],
+];
+
+// Qeshm Island (large island hugging Iran coast)
+const QESHM = [
+  [55.60, 26.72],
+  [55.70, 26.68],
+  [55.80, 26.62],
+  [55.90, 26.58],
+  [56.00, 26.52],
+  [56.10, 26.48],
+  [56.18, 26.52],
+  [56.25, 26.50],
+  [56.30, 26.52],
+  [56.30, 26.58],
+  [56.22, 26.58],
+  [56.15, 26.55],
+  [56.05, 26.55],
+  [55.95, 26.52],
+  [55.85, 26.55],
+  [55.75, 26.60],
+  [55.65, 26.65],
+  [55.58, 26.70],
+];
+
+// Hormuz Island
+const HORMUZ_ISLAND = [
+  [56.44, 26.52],
+  [56.48, 26.48],
+  [56.52, 26.46],
+  [56.50, 26.50],
+  [56.46, 26.53],
+];
+
+// Larak Island
+const LARAK_ISLAND = [
+  [56.34, 26.84],
+  [56.38, 26.82],
+  [56.40, 26.85],
+  [56.37, 26.87],
+];
+
+// Musandam Peninsula (Oman, south) - the dramatic peninsula jutting north
+const MUSANDAM = [
+  [56.08, 25.70], // SW - bottom edge
+  [56.10, 25.85],
+  [56.08, 25.95],
+  [56.05, 26.05],
+  [56.02, 26.12],
+  [56.08, 26.20],
+  [56.15, 26.28],
+  [56.22, 26.32],
+  [56.28, 26.35],
+  [56.32, 26.30],
+  [56.35, 26.22],
+  [56.38, 26.15],
+  [56.42, 26.08],
+  [56.40, 26.00],
+  [56.35, 25.92],
+  [56.32, 25.85],
+  [56.30, 25.78],
+  [56.28, 25.70], // SE - bottom edge
+];
+
+// UAE coast (southwest) - connects to bottom-left
+const UAE_COAST = [
+  [55.40, 25.70], // bottom-left corner
+  [55.40, 25.90],
+  [55.50, 25.95],
+  [55.55, 26.00],
+  [55.60, 26.05],
+  [55.65, 26.12],
+  [55.70, 26.15],
+  [55.80, 26.18],
+  [55.85, 26.15],
+  [55.90, 26.10],
+  [55.95, 26.05],
+  [56.00, 26.02],
+  [56.05, 26.02],
+  [56.08, 26.05],
+  // connects to Musandam
+  [56.08, 25.70], // bottom edge back to start
+];
+
+// All land polygons
+const LAND_POLYGONS = [
+  { points: IRAN_COAST, label: 'IRAN', labelPos: [55.8, 27.05] },
+  { points: QESHM, label: 'Qeshm', labelPos: [55.9, 26.58] },
+  { points: HORMUZ_ISLAND, label: null, labelPos: null },
+  { points: LARAK_ISLAND, label: null, labelPos: null },
+  { points: MUSANDAM, label: 'OMAN', labelPos: [56.18, 25.95] },
+  { points: UAE_COAST, label: 'UAE', labelPos: [55.55, 25.82] },
+];
+
+// ============================================================
+// GEO PROJECTION
+// ============================================================
+function geoToPixel(lon, lat, w, h) {
+  const x = (lon - MIN_LON) / (MAX_LON - MIN_LON) * w;
+  const y = (1 - (lat - MIN_LAT) / (MAX_LAT - MIN_LAT)) * h;
+  return [x, y];
+}
+
+// ============================================================
+// WATER DETECTION
+// ============================================================
+function computePlayableGrid() {
+  const sampleScale = 10; // sample 10x10 pixels per cell
+  const sw = COLS * sampleScale;
+  const sh = ROWS * sampleScale;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = sw;
+  offscreen.height = sh;
+  const ctx = offscreen.getContext('2d');
+
+  // Fill with water (blue)
+  ctx.fillStyle = '#0000ff';
+  ctx.fillRect(0, 0, sw, sh);
+
+  // Draw land (green)
+  ctx.fillStyle = '#00ff00';
+  for (const poly of LAND_POLYGONS) {
+    ctx.beginPath();
+    const [sx, sy] = geoToPixel(poly.points[0][0], poly.points[0][1], sw, sh);
+    ctx.moveTo(sx, sy);
+    for (let i = 1; i < poly.points.length; i++) {
+      const [px, py] = geoToPixel(poly.points[i][0], poly.points[i][1], sw, sh);
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Sample each cell
+  const playable = [];
+  const imgData = ctx.getImageData(0, 0, sw, sh);
+  for (let r = 0; r < ROWS; r++) {
+    playable[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      let waterPixels = 0;
+      let totalPixels = 0;
+      for (let py = r * sampleScale; py < (r + 1) * sampleScale; py++) {
+        for (let px = c * sampleScale; px < (c + 1) * sampleScale; px++) {
+          const idx = (py * sw + px) * 4;
+          // Blue channel high = water
+          if (imgData.data[idx + 2] > 200 && imgData.data[idx + 1] < 100) {
+            waterPixels++;
+          }
+          totalPixels++;
+        }
+      }
+      playable[r][c] = (waterPixels / totalPixels) >= WATER_THRESHOLD;
+    }
+  }
+  return playable;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let board = [];
+let playableGrid = [];
+let gameState = 'waiting'; // waiting | playing | won | lost
+let minesRemaining = MINE_COUNT;
+let startTime = null;
+let timerInterval = null;
+let firstClick = true;
+let audioCtx = null;
+let longPressTimer = null;
+let longPressTriggered = false;
+let touchStartPos = null;
+
+// ============================================================
+// BOARD GENERATION
+// ============================================================
+function initBoard() {
+  board = [];
+  for (let r = 0; r < ROWS; r++) {
+    board[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      board[r][c] = {
+        isMine: false,
+        adjacentMines: 0,
+        isRevealed: false,
+        isFlagged: false,
+        isPlayable: playableGrid[r][c],
+      };
+    }
+  }
+}
+
+function placeMines(safeRow, safeCol) {
+  const candidates = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!board[r][c].isPlayable) continue;
+      // Exclude safe zone (clicked cell + neighbors)
+      if (Math.abs(r - safeRow) <= 1 && Math.abs(c - safeCol) <= 1) continue;
+      candidates.push([r, c]);
+    }
+  }
+
+  // Fisher-Yates shuffle
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  const count = Math.min(MINE_COUNT, candidates.length);
+  for (let i = 0; i < count; i++) {
+    const [r, c] = candidates[i];
+    board[r][c].isMine = true;
+  }
+
+  // Compute adjacent mine counts
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!board[r][c].isPlayable) continue;
+      let count2 = 0;
+      forEachNeighbor(r, c, (nr, nc) => {
+        if (board[nr][nc].isMine) count2++;
+      });
+      board[r][c].adjacentMines = count2;
+    }
+  }
+}
+
+function forEachNeighbor(r, c, fn) {
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc].isPlayable) {
+        fn(nr, nc);
+      }
+    }
+  }
+}
+
+// ============================================================
+// DOM CREATION
+// ============================================================
+const gridEl = document.getElementById('grid');
+const landCanvas = document.getElementById('land-canvas');
+const overlayEl = document.getElementById('overlay');
+const mineCounterEl = document.getElementById('mine-counter');
+const timerEl = document.getElementById('timer');
+const bestTimeEl = document.getElementById('best-time');
+const flashEl = document.getElementById('flash');
+
+let cellEls = [];
+
+function createGrid() {
+  gridEl.innerHTML = '';
+  gridEl.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+  gridEl.style.gridTemplateRows = `repeat(${ROWS}, 1fr)`;
+  cellEls = [];
+
+  for (let r = 0; r < ROWS; r++) {
+    cellEls[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+
+      if (!playableGrid[r][c]) {
+        cell.classList.add('land');
+      }
+
+      // Mouse events
+      cell.addEventListener('click', (e) => onCellClick(r, c, e));
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        onCellRightClick(r, c);
+      });
+
+      // Touch events for long-press flag
+      cell.addEventListener('touchstart', (e) => onTouchStart(r, c, e), { passive: false });
+      cell.addEventListener('touchmove', (e) => onTouchMove(e), { passive: false });
+      cell.addEventListener('touchend', (e) => onTouchEnd(r, c, e), { passive: false });
+
+      gridEl.appendChild(cell);
+      cellEls[r][c] = cell;
+    }
+  }
+}
+
+// ============================================================
+// LAND OVERLAY CANVAS
+// ============================================================
+function drawLandOverlay() {
+  const rect = gridEl.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  landCanvas.width = rect.width * dpr;
+  landCanvas.height = rect.height * dpr;
+  landCanvas.style.width = rect.width + 'px';
+  landCanvas.style.height = rect.height + 'px';
+
+  const ctx = landCanvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw land polygons
+  for (const poly of LAND_POLYGONS) {
+    ctx.beginPath();
+    const [sx, sy] = geoToPixel(poly.points[0][0], poly.points[0][1], w, h);
+    ctx.moveTo(sx, sy);
+    for (let i = 1; i < poly.points.length; i++) {
+      const [px, py] = geoToPixel(poly.points[i][0], poly.points[i][1], w, h);
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#c2a66b';
+    ctx.fill();
+    ctx.strokeStyle = '#8b7355';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Draw label
+    if (poly.label && poly.labelPos) {
+      const [lx, ly] = geoToPixel(poly.labelPos[0], poly.labelPos[1], w, h);
+      ctx.font = `bold ${Math.max(10, w * 0.018)}px -apple-system, sans-serif`;
+      ctx.fillStyle = 'rgba(80, 55, 30, 0.7)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(poly.label, lx, ly);
+    }
+  }
+}
+
+// Resize observer to keep canvas in sync
+const resizeObserver = new ResizeObserver(() => {
+  drawLandOverlay();
+});
+
+// ============================================================
+// CELL INTERACTIONS
+// ============================================================
+function onCellClick(r, c, e) {
+  if (longPressTriggered) {
+    longPressTriggered = false;
+    return;
+  }
+  if (gameState === 'won' || gameState === 'lost') return;
+  if (!board[r][c].isPlayable) return;
+  if (board[r][c].isFlagged) return;
+
+  if (firstClick) {
+    firstClick = false;
+    gameState = 'playing';
+    placeMines(r, c);
+    startTimer();
+  }
+
+  if (board[r][c].isRevealed) {
+    // Chord: if all flags placed around, reveal remaining neighbors
+    chordReveal(r, c);
+    return;
+  }
+
+  revealCell(r, c);
+}
+
+function onCellRightClick(r, c) {
+  if (gameState === 'won' || gameState === 'lost') return;
+  if (!board[r][c].isPlayable) return;
+  if (board[r][c].isRevealed) return;
+  toggleFlag(r, c);
+}
+
+function onTouchStart(r, c, e) {
+  if (gameState === 'won' || gameState === 'lost') return;
+  touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  longPressTriggered = false;
+  longPressTimer = setTimeout(() => {
+    longPressTriggered = true;
+    onCellRightClick(r, c);
+  }, 400);
+}
+
+function onTouchMove(e) {
+  if (!touchStartPos || !longPressTimer) return;
+  const dx = e.touches[0].clientX - touchStartPos.x;
+  const dy = e.touches[0].clientY - touchStartPos.y;
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+function onTouchEnd(r, c, e) {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+// ============================================================
+// GAME LOGIC
+// ============================================================
+function revealCell(r, c) {
+  const cell = board[r][c];
+  if (cell.isRevealed || cell.isFlagged || !cell.isPlayable) return;
+
+  if (cell.isMine) {
+    gameOver(r, c);
+    return;
+  }
+
+  // BFS flood fill
+  const queue = [[r, c]];
+  const visited = new Set();
+  visited.add(`${r},${c}`);
+  let revealOrder = [];
+
+  while (queue.length > 0) {
+    const [cr, cc] = queue.shift();
+    const current = board[cr][cc];
+    if (current.isRevealed || !current.isPlayable || current.isFlagged) continue;
+
+    current.isRevealed = true;
+    revealOrder.push([cr, cc]);
+
+    if (current.adjacentMines === 0) {
+      forEachNeighbor(cr, cc, (nr, nc) => {
+        const key = `${nr},${nc}`;
+        if (!visited.has(key) && !board[nr][nc].isRevealed && !board[nr][nc].isMine) {
+          visited.add(key);
+          queue.push([nr, nc]);
+        }
+      });
+    }
+  }
+
+  // Animate reveals with stagger
+  revealOrder.forEach(([rr, rc], i) => {
+    setTimeout(() => {
+      renderCell(rr, rc);
+      cellEls[rr][rc].classList.add('wave-reveal');
+      setTimeout(() => cellEls[rr][rc].classList.remove('wave-reveal'), 200);
+    }, Math.min(i * 8, 400));
+  });
+
+  // Sound
+  if (revealOrder.length > 3) {
+    playCascadeSound(revealOrder.length);
+  } else {
+    playClickSound();
+  }
+
+  // Check win
+  setTimeout(() => checkWin(), Math.min(revealOrder.length * 8, 500) + 50);
+}
+
+function chordReveal(r, c) {
+  const cell = board[r][c];
+  if (!cell.isRevealed || cell.adjacentMines === 0) return;
+
+  let flagCount = 0;
+  forEachNeighbor(r, c, (nr, nc) => {
+    if (board[nr][nc].isFlagged) flagCount++;
+  });
+
+  if (flagCount === cell.adjacentMines) {
+    forEachNeighbor(r, c, (nr, nc) => {
+      if (!board[nr][nc].isRevealed && !board[nr][nc].isFlagged) {
+        revealCell(nr, nc);
+      }
+    });
+  }
+}
+
+function toggleFlag(r, c) {
+  const cell = board[r][c];
+  cell.isFlagged = !cell.isFlagged;
+  minesRemaining += cell.isFlagged ? -1 : 1;
+  renderCell(r, c);
+  updateMineCounter();
+  playFlagSound(cell.isFlagged);
+}
+
+function gameOver(hitR, hitC) {
+  gameState = 'lost';
+  stopTimer();
+  board[hitR][hitC].isRevealed = true;
+
+  playExplosionSound();
+
+  // Flash
+  flashEl.style.display = 'block';
+  setTimeout(() => { flashEl.style.display = 'none'; }, 300);
+
+  // Shake
+  const wrapper = document.getElementById('board-wrapper');
+  wrapper.classList.add('shaking');
+  setTimeout(() => wrapper.classList.remove('shaking'), 500);
+
+  // Show hit mine
+  renderCell(hitR, hitC);
+  cellEls[hitR][hitC].classList.add('mine-hit', 'pop');
+
+  // Reveal all mines with stagger
+  const mines = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c].isMine && !(r === hitR && c === hitC)) {
+        mines.push([r, c]);
+      }
+    }
+  }
+
+  mines.forEach(([mr, mc], i) => {
+    setTimeout(() => {
+      board[mr][mc].isRevealed = true;
+      cellEls[mr][mc].classList.add('mine-revealed');
+      renderCell(mr, mc);
+      cellEls[mr][mc].classList.add('pop');
+    }, 80 + i * 40);
+  });
+
+  // Show overlay
+  setTimeout(() => showOverlay('lost'), 800 + mines.length * 40);
+}
+
+function checkWin() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = board[r][c];
+      if (cell.isPlayable && !cell.isMine && !cell.isRevealed) return;
+    }
+  }
+
+  gameState = 'won';
+  stopTimer();
+  playWinSound();
+
+  // Auto-flag remaining mines
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c].isMine && !board[r][c].isFlagged) {
+        board[r][c].isFlagged = true;
+        renderCell(r, c);
+      }
+    }
+  }
+  minesRemaining = 0;
+  updateMineCounter();
+
+  const elapsed = getElapsedTime();
+  const best = getBestTime();
+  const isNewBest = best === null || elapsed < best;
+  if (isNewBest) {
+    setBestTime(elapsed);
+    updateBestTimeDisplay();
+  }
+
+  setTimeout(() => showOverlay('won', elapsed, isNewBest), 500);
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderCell(r, c) {
+  const cell = board[r][c];
+  const el = cellEls[r][c];
+
+  if (!cell.isPlayable) return;
+
+  el.className = 'cell';
+
+  if (cell.isRevealed) {
+    el.classList.add('revealed');
+    if (cell.isMine) {
+      el.textContent = '💣';
+    } else if (cell.adjacentMines > 0) {
+      el.textContent = cell.adjacentMines;
+      el.classList.add('n' + cell.adjacentMines);
+    } else {
+      el.textContent = '';
+    }
+  } else if (cell.isFlagged) {
+    el.classList.add('flagged');
+    el.textContent = '🚩';
+  } else {
+    el.textContent = '';
+  }
+}
+
+function updateMineCounter() {
+  mineCounterEl.textContent = '💣 ' + minesRemaining;
+}
+
+// ============================================================
+// OVERLAY
+// ============================================================
+function showOverlay(type, time, isNewBest) {
+  const emoji = overlayEl.querySelector('.emoji');
+  const msg = overlayEl.querySelector('.msg');
+  const sub = overlayEl.querySelector('.sub');
+  const record = overlayEl.querySelector('.record');
+
+  if (type === 'lost') {
+    emoji.textContent = '💥';
+    msg.textContent = 'BOOM!';
+    sub.textContent = 'You hit a mine.';
+    record.textContent = '';
+  } else {
+    emoji.textContent = '🎉';
+    msg.textContent = 'Strait Cleared!';
+    sub.textContent = `Time: ${time.toFixed(1)}s`;
+    record.textContent = isNewBest ? '⭐ New Record!' : `Best: ${getBestTime().toFixed(1)}s`;
+  }
+
+  overlayEl.classList.add('visible');
+}
+
+function hideOverlay() {
+  overlayEl.classList.remove('visible');
+}
+
+overlayEl.addEventListener('click', () => {
+  if (gameState === 'won' || gameState === 'lost') {
+    resetGame();
+  }
+});
+
+// ============================================================
+// TIMER
+// ============================================================
+function startTimer() {
+  startTime = performance.now();
+  timerInterval = setInterval(() => {
+    timerEl.textContent = '⏱ ' + getElapsedTime().toFixed(1) + 's';
+  }, 100);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  // Final update
+  if (startTime) {
+    timerEl.textContent = '⏱ ' + getElapsedTime().toFixed(1) + 's';
+  }
+}
+
+function getElapsedTime() {
+  if (!startTime) return 0;
+  return (performance.now() - startTime) / 1000;
+}
+
+// ============================================================
+// LOCAL STORAGE
+// ============================================================
+function getBestTime() {
+  const v = localStorage.getItem('hormuz-sweeper-best');
+  return v ? parseFloat(v) : null;
+}
+
+function setBestTime(t) {
+  localStorage.setItem('hormuz-sweeper-best', t.toFixed(1));
+}
+
+function updateBestTimeDisplay() {
+  const best = getBestTime();
+  bestTimeEl.textContent = best !== null ? `Best: ${best.toFixed(1)}s` : 'Best: --';
+}
+
+// ============================================================
+// SOUND ENGINE (Web Audio API)
+// ============================================================
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function playClickSound() {
+  ensureAudio();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 700 + Math.random() * 200;
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.06);
+}
+
+function playCascadeSound(count) {
+  ensureAudio();
+  const steps = Math.min(count, 15);
+  for (let i = 0; i < steps; i++) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 500 + i * 60;
+    const t = audioCtx.currentTime + i * 0.03;
+    gain.gain.setValueAtTime(0.06, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.05);
+  }
+}
+
+function playFlagSound(placing) {
+  ensureAudio();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  if (placing) {
+    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(900, audioCtx.currentTime + 0.08);
+  } else {
+    osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.08);
+  }
+  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playExplosionSound() {
+  ensureAudio();
+  // White noise burst
+  const bufferSize = audioCtx.sampleRate * 0.8;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+  noise.connect(noiseGain).connect(audioCtx.destination);
+  noise.start();
+
+  // Low rumble
+  const osc = audioCtx.createOscillator();
+  const oscGain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.6);
+  oscGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.7);
+  osc.connect(oscGain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.7);
+}
+
+function playWinSound() {
+  ensureAudio();
+  const notes = [523, 659, 784, 988, 1047]; // C5 E5 G5 B5 C6
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const t = audioCtx.currentTime + i * 0.15;
+    gain.gain.setValueAtTime(0.1, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  });
+}
+
+// ============================================================
+// GAME RESET
+// ============================================================
+function resetGame() {
+  stopTimer();
+  hideOverlay();
+  gameState = 'waiting';
+  firstClick = true;
+  minesRemaining = MINE_COUNT;
+  startTime = null;
+  timerEl.textContent = '⏱ 0.0s';
+  updateMineCounter();
+  initBoard();
+  createGrid();
+  // Redraw land after grid is in the DOM
+  requestAnimationFrame(() => drawLandOverlay());
+}
+
+// ============================================================
+// BOOTSTRAP
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  playableGrid = computePlayableGrid();
+  updateBestTimeDisplay();
+  resetGame();
+  resizeObserver.observe(gridEl);
+});
+</script>
+</body>
+</html>
