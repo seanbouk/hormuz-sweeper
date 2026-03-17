@@ -379,6 +379,7 @@ let audioCtx = null;
 let longPressTimer = null;
 let longPressTriggered = false;
 let touchStartPos = null;
+let lastFlaggedCell = null;
 
 // ============================================================
 // BOARD GENERATION
@@ -528,6 +529,10 @@ function onCellClick(r, c, e) {
     longPressTriggered = false;
     return;
   }
+  // Ignore click if this cell was just flagged (synthetic click from touch)
+  if (lastFlaggedCell === `${r},${c}`) {
+    return;
+  }
   if (gameState === 'won' || gameState === 'lost') return;
   if (!board[r][c].isPlayable) return;
   if (board[r][c].isFlagged) return;
@@ -669,6 +674,9 @@ function toggleFlag(r, c) {
   renderCell(r, c);
   updateMineCounter();
   playFlagSound(cell.isFlagged);
+  // Track this cell to ignore the synthetic click that follows
+  lastFlaggedCell = `${r},${c}`;
+  setTimeout(() => { lastFlaggedCell = null; }, 200);
 }
 
 function gameOver(hitR, hitC) {
