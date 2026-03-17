@@ -895,8 +895,17 @@ function gameOver(hitR, hitC) {
     }, 80 + i * 40);
   });
 
+  // Count correctly flagged mines
+  const correctFlags = countCorrectFlags();
+  const bestFlags = getBestFlags();
+  const isNewBestFlags = bestFlags === null || correctFlags > bestFlags;
+  if (isNewBestFlags && correctFlags > 0) {
+    setBestFlags(correctFlags);
+  }
+  updateBestDisplay();
+
   // Show overlay
-  setTimeout(() => showOverlay('lost'), 800 + mines.length * 40);
+  setTimeout(() => showOverlay('lost', null, false, correctFlags, isNewBestFlags && correctFlags > 0), 800 + mines.length * 40);
 }
 
 function checkWin() {
@@ -928,8 +937,13 @@ function checkWin() {
   const isNewBest = best === null || elapsed < best;
   if (isNewBest) {
     setBestTime(elapsed);
-    updateBestTimeDisplay();
   }
+  // Clearing the level also counts as finding all mines
+  const bestFlags = getBestFlags();
+  if (bestFlags === null || MINE_COUNT > bestFlags) {
+    setBestFlags(MINE_COUNT);
+  }
+  updateBestDisplay();
 
   setTimeout(() => showOverlay('won', elapsed, isNewBest), 500);
 }
@@ -970,7 +984,7 @@ function updateMineCounter() {
 // ============================================================
 // OVERLAY
 // ============================================================
-function showOverlay(type, time, isNewBest) {
+function showOverlay(type, time, isNewBest, minesFound, isNewBestFlags) {
   const emoji = overlayEl.querySelector('.emoji');
   const msg = overlayEl.querySelector('.msg');
   const sub = overlayEl.querySelector('.sub');
@@ -979,8 +993,8 @@ function showOverlay(type, time, isNewBest) {
   if (type === 'lost') {
     emoji.textContent = '💥';
     msg.textContent = 'BOOM!';
-    sub.textContent = 'You hit a mine.';
-    record.textContent = '';
+    sub.textContent = `Mines found: ${minesFound} / ${MINE_COUNT}`;
+    record.textContent = isNewBestFlags ? '⭐ New record!' : '';
   } else {
     emoji.textContent = '🎉';
     msg.textContent = 'Strait Cleared!';
@@ -1031,17 +1045,40 @@ function getElapsedTime() {
 // LOCAL STORAGE
 // ============================================================
 function getBestTime() {
-  const v = localStorage.getItem('hormuz-sweeper-best');
+  const v = localStorage.getItem('hormuz-sweeper-best-time');
   return v ? parseFloat(v) : null;
 }
 
 function setBestTime(t) {
-  localStorage.setItem('hormuz-sweeper-best', t.toFixed(1));
+  localStorage.setItem('hormuz-sweeper-best-time', t.toFixed(1));
 }
 
-function updateBestTimeDisplay() {
-  const best = getBestTime();
-  bestTimeEl.textContent = best !== null ? `Best: ${best.toFixed(1)}s` : 'Best: --';
+function getBestFlags() {
+  const v = localStorage.getItem('hormuz-sweeper-best-flags');
+  return v ? parseInt(v) : null;
+}
+
+function setBestFlags(n) {
+  localStorage.setItem('hormuz-sweeper-best-flags', String(n));
+}
+
+function countCorrectFlags() {
+  let count = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c].isFlagged && board[r][c].isMine) count++;
+    }
+  }
+  return count;
+}
+
+function updateBestDisplay() {
+  const bestFlags = getBestFlags();
+  const bestTime = getBestTime();
+  let parts = [];
+  if (bestFlags !== null) parts.push(`Mines: ${bestFlags}/${MINE_COUNT}`);
+  if (bestTime !== null) parts.push(`Time: ${bestTime.toFixed(1)}s`);
+  bestTimeEl.textContent = parts.length > 0 ? parts.join(' | ') : 'Best: --';
 }
 
 // ============================================================
@@ -1175,7 +1212,7 @@ function resetGame() {
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   playableGrid = computePlayableGrid();
-  updateBestTimeDisplay();
+  updateBestDisplay();
   resetGame();
   resizeObserver.observe(document.getElementById('board-wrapper'));
 });
