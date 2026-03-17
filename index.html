@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Hormuz Sweeper</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>">
-<script src="map_data.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1033,16 +1032,54 @@ function resetGame() {
 // BOOTSTRAP
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Load map image first
-  mapImage = new Image();
-  mapImage.onload = () => {
-    document.getElementById('loading-bar').classList.add('hidden');
-    playableGrid = computePlayableGrid();
-    updateBestDisplay();
-    resetGame();
-    resizeObserver.observe(document.getElementById('board-wrapper'));
-  };
-  mapImage.src = typeof MAP_DATA_URL !== 'undefined' ? MAP_DATA_URL : 'map.png';
+  // Load map chunks dynamically
+  const TOTAL_CHUNKS = 10;
+  let chunksLoaded = 0;
+  const chunks = {};
+  const progressBar = document.getElementById('loading-bar-fill');
+
+  function onChunkLoaded() {
+    chunksLoaded++;
+    if (progressBar) {
+      progressBar.style.width = (chunksLoaded / TOTAL_CHUNKS * 100) + '%';
+    }
+    if (chunksLoaded === TOTAL_CHUNKS) {
+      // All chunks loaded, concatenate and create data URL
+      let fullBase64 = '';
+      for (let i = 1; i <= TOTAL_CHUNKS; i++) {
+        fullBase64 += chunks[i];
+      }
+      const MAP_DATA_URL = 'data:image/png;base64,' + fullBase64;
+
+      // Now load the image
+      mapImage = new Image();
+      mapImage.onload = () => {
+        document.getElementById('loading-bar').classList.add('hidden');
+        playableGrid = computePlayableGrid();
+        updateBestDisplay();
+        resetGame();
+        resizeObserver.observe(document.getElementById('board-wrapper'));
+      };
+      mapImage.onerror = () => {
+        document.getElementById('loading-bar').classList.add('hidden');
+      };
+      mapImage.src = MAP_DATA_URL;
+    }
+  }
+
+  // Load chunks one at a time
+  for (let i = 1; i <= TOTAL_CHUNKS; i++) {
+    const script = document.createElement('script');
+    script.onload = (function(chunkNum) {
+      return function() {
+        chunks[chunkNum] = window['MAP_CHUNK_' + chunkNum];
+        onChunkLoaded();
+      };
+    })(i);
+    script.onerror = onChunkLoaded;
+    script.src = `map_chunk_${i}.js`;
+    document.head.appendChild(script);
+  }
 });
 </script>
 </body>
