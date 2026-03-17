@@ -795,6 +795,7 @@ function renderCell(r, c) {
   } else if (cell.isFlagged) {
     el.classList.add('flagged');
     el.textContent = '🚩';
+    el.style.background = '#4CAF50';  // Temporary visual test
   } else {
     el.textContent = '';
   }
