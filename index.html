@@ -580,6 +580,11 @@ function onTouchEnd(r, c, e) {
     clearTimeout(longPressTimer);
     longPressTimer = null;
   }
+  // Prevent click event from firing after long-press
+  if (longPressTriggered) {
+    e.preventDefault();
+    longPressTriggered = false;
+  }
 }
 
 // ============================================================
