@@ -126,7 +126,7 @@
   }
 
   .cell.flagged {
-    font-size: 16px;
+    background: #4CAF50 !important;
   }
 
   .cell.mine-revealed {
@@ -262,7 +262,6 @@
     #header { font-size: 13px; padding: 4px 8px; }
     #header .title { font-size: 12px; }
     .cell { font-size: 11px; }
-    .cell.flagged { font-size: 13px; }
     #overlay .emoji { font-size: 36px; }
     #overlay .msg { font-size: 18px; }
   }
@@ -482,7 +481,9 @@ function createGrid() {
       cell.addEventListener('click', (e) => onCellClick(r, c, e));
       cell.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        onCellRightClick(r, c);
+        if (!('ontouchstart' in window)) {
+          onCellRightClick(r, c);
+        }
       });
 
       // Touch events for long-press flag
@@ -779,6 +780,7 @@ function renderCell(r, c) {
   if (!cell.isPlayable) return;
 
   el.className = 'cell';
+  el.style.background = '';
 
   if (cell.isRevealed) {
     el.classList.add('revealed');
@@ -793,7 +795,6 @@ function renderCell(r, c) {
   } else if (cell.isFlagged) {
     el.classList.add('flagged');
     el.textContent = '🚩';
-    el.style.background = '#4CAF50';  // Temporary visual test
   } else {
     el.textContent = '';
   }
